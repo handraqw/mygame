@@ -15,4 +15,5 @@ class EventBus:
             try:
                 cb(*args, **kwargs)
             except Exception as e:
-                print(f"Event handler error for {event_name}: {e}")
+                # swallow listener exceptions to avoid breaking game loop; could log if needed
+                pass

@@ -24,7 +24,9 @@ class ObjectPool:
             self._in_use.remove(obj)
         except ValueError:
             pass
-        self._free.append(obj)
+        # avoid appending duplicates to free list
+        if obj not in self._free:
+            self._free.append(obj)
 
     def for_each(self):
         return list(self._in_use)
