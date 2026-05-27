@@ -1,13 +1,14 @@
 import pygame
+from config import PLAYER_SPEED, PLAYER_RADIUS, PLAYER_HP
 
 
 class Player:
-    def __init__(self, pos=(0, 0)):
+    def __init__(self, pos=(0, 0), speed=None, radius=None, hp=None):
         self.position = list(pos)
-        self.speed = 300.0  # units per second
-        self.radius = 18
+        self.speed = speed if speed is not None else PLAYER_SPEED
+        self.radius = radius if radius is not None else PLAYER_RADIUS
         self.color = (200, 200, 50)
-        self.hp = 100
+        self.hp = hp if hp is not None else PLAYER_HP
 
     def handle_input(self, keys, dt):
         vx = 0

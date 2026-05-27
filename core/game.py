@@ -4,9 +4,7 @@ from .eventbus import EventBus
 from .fsm import StateMachine
 from .camera import Camera
 from entities.player import Player
-
-WORLD_WIDTH = 5000
-WORLD_HEIGHT = 5000
+from config import WORLD_WIDTH, WORLD_HEIGHT, GRID_SIZE
 
 
 class PlayingState:
@@ -67,6 +65,13 @@ class Game:
 
     def update_playing(self, dt):
         self.player.update(dt)
+        # clamp player to world bounds (keep inside world considering player radius)
+        px, py = self.player.position
+        r = getattr(self.player, 'radius', 0)
+        px = max(r, min(px, WORLD_WIDTH - r))
+        py = max(r, min(py, WORLD_HEIGHT - r))
+        self.player.position[0] = px
+        self.player.position[1] = py
         # update camera
         self.camera.follow(self.player.position)
 
@@ -84,18 +89,27 @@ class Game:
 
     def draw_grid(self):
         # draw a tiled grid to visualize movement
-        grid_size = 64
+        grid_size = GRID_SIZE
         color1 = (40, 40, 40)
         color2 = (50, 50, 50)
-        start_x = (self.camera.x // grid_size) * grid_size
-        start_y = (self.camera.y // grid_size) * grid_size
-        cols = self.width // grid_size + 2
-        rows = self.height // grid_size + 2
-        for i in range(cols):
-            for j in range(rows):
-                wx = start_x + i * grid_size
-                wy = start_y + j * grid_size
-                sx, sy = self.camera.world_to_screen((wx, wy))
-                rect = pygame.Rect(sx, sy, grid_size, grid_size)
+        # compute pixel offset of camera inside a grid cell
+        off_x = self.camera.ix % grid_size
+        off_y = self.camera.iy % grid_size
+        # draw grid starting slightly before the screen to cover edges
+        start_x = -off_x
+        start_y = -off_y
+        x = start_x
+        # draw columns and rows by stepping grid_size to avoid per-tile world->screen conversions
+        while x < self.width:
+            y = start_y
+            # compute column index in world space for alternating colors
+            col_world = (self.camera.ix + x) // grid_size
+            i = int(col_world)
+            while y < self.height:
+                row_world = (self.camera.iy + y) // grid_size
+                j = int(row_world)
                 color = color1 if (i + j) % 2 == 0 else color2
+                rect = pygame.Rect(x, y, grid_size, grid_size)
                 pygame.draw.rect(self.screen, color, rect)
+                y += grid_size
+            x += grid_size
