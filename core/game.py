@@ -10,6 +10,7 @@ from entities.enemy import Enemy
 from systems.spawn_system import SpawnSystem
 from entities.xp_orb import XPOrb
 import random
+import os
 from entities.arrow import Arrow
 
 
@@ -102,6 +103,42 @@ class Game:
         self.xp_orb_pool = ObjectPool(XPOrb, initial=10)
         # arrows
         self.arrow_pool = ObjectPool(Arrow, initial=10)
+        # background image
+        try:
+            bg_path = os.path.join('assets', 'background', 'background.png')
+            self.bg_img = pygame.image.load(bg_path).convert()
+            self.bg_w = self.bg_img.get_width()
+            self.bg_h = self.bg_img.get_height()
+        except Exception:
+            self.bg_img = None
+            self.bg_w = 0
+            self.bg_h = 0
+        # try load enemy/player/xp sprites if present
+        # helper to load and scale a sprite to target size
+        def load_and_scale(path, target_size=None, alpha=True):
+            try:
+                img = pygame.image.load(path)
+                img = img.convert_alpha() if alpha else img.convert()
+                if target_size:
+                    img = pygame.transform.smoothscale(img, target_size)
+                return img
+            except Exception:
+                return None
+
+        from config import PLAYER_SPRITE_SIZE, ENEMY_SPRITE_SIZE, XP_SPRITE_SIZE
+
+        def first_png_in(dirpath):
+            try:
+                for fn in os.listdir(dirpath):
+                    if fn.lower().endswith('.png'):
+                        return os.path.join(dirpath, fn)
+            except Exception:
+                return None
+
+        Enemy.sprite = load_and_scale(first_png_in(os.path.join('assets', 'enemies')) or '', ENEMY_SPRITE_SIZE)
+        XPOrb.sprite = load_and_scale(first_png_in(os.path.join('assets', 'experience')) or '', XP_SPRITE_SIZE)
+        # allow any filename inside assets/player/
+        Player.sprite = load_and_scale(first_png_in(os.path.join('assets', 'player')) or '', PLAYER_SPRITE_SIZE)
 
         # start state
         self.fsm.change(PlayingState(self))
@@ -242,9 +279,11 @@ class Game:
                     self.player.hit_timer = self.player.hit_cooldown
 
     def render(self):
-        # draw background grid
-        self.screen.fill((20, 20, 20))
-        self.draw_grid()
+        # draw background (tiled) or fallback color
+        if getattr(self, 'bg_img', None):
+            self.draw_background()
+        else:
+            self.screen.fill((20, 20, 20))
 
         # draw entities
         self.player.draw(self.screen, self.camera)
@@ -300,28 +339,24 @@ class Game:
         pygame.display.flip()
 
     def draw_grid(self):
-        # draw a tiled grid to visualize movement
-        grid_size = GRID_SIZE
-        color1 = (40, 40, 40)
-        color2 = (50, 50, 50)
-        # compute pixel offset of camera inside a grid cell
-        off_x = self.camera.ix % grid_size
-        off_y = self.camera.iy % grid_size
-        # draw grid starting slightly before the screen to cover edges
+        # legacy: not used when background image present
+        pass
+
+    def draw_background(self):
+        # tile background image according to camera integer offsets
+        if not self.bg_img:
+            return
+        tile_w = self.bg_w
+        tile_h = self.bg_h
+        # pixel offset of camera inside a tile
+        off_x = self.camera.ix % tile_w
+        off_y = self.camera.iy % tile_h
         start_x = -off_x
         start_y = -off_y
         x = start_x
-        # draw columns and rows by stepping grid_size to avoid per-tile world->screen conversions
         while x < self.width:
             y = start_y
-            # compute column index in world space for alternating colors
-            col_world = (self.camera.ix + x) // grid_size
-            i = int(col_world)
             while y < self.height:
-                row_world = (self.camera.iy + y) // grid_size
-                j = int(row_world)
-                color = color1 if (i + j) % 2 == 0 else color2
-                rect = pygame.Rect(x, y, grid_size, grid_size)
-                pygame.draw.rect(self.screen, color, rect)
-                y += grid_size
-            x += grid_size
+                self.screen.blit(self.bg_img, (x, y))
+                y += tile_h
+            x += tile_w

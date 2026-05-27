@@ -80,9 +80,15 @@ class Player:
 
     def draw(self, surface, camera):
         sx, sy = camera.world_to_screen(self.position)
-        pygame.draw.circle(surface, self.color, (int(sx), int(sy)), self.radius)
-        # draw bounding circle
-        pygame.draw.circle(surface, (255, 255, 255), (int(sx), int(sy)), self.radius, 1)
+        sprite = getattr(self.__class__, 'sprite', None)
+        if sprite:
+            w = sprite.get_width()
+            h = sprite.get_height()
+            surface.blit(sprite, (int(sx - w // 2), int(sy - h // 2)))
+        else:
+            pygame.draw.circle(surface, self.color, (int(sx), int(sy)), self.radius)
+            # draw bounding circle
+            pygame.draw.circle(surface, (255, 255, 255), (int(sx), int(sy)), self.radius, 1)
         # draw health bar under player
         bar_w = max(40, self.radius * 2)
         bar_h = 6

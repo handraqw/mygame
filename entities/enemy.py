@@ -40,8 +40,15 @@ class Enemy:
         if not self.alive:
             return
         sx, sy = camera.world_to_screen(self.position)
-        pygame.draw.circle(surface, self.color, (int(sx), int(sy)), self.radius)
-        pygame.draw.circle(surface, (255, 255, 255), (int(sx), int(sy)), self.radius, 1)
+        # if a sprite is provided on the class, draw it centered
+        sprite = getattr(self.__class__, 'sprite', None)
+        if sprite:
+            w = sprite.get_width()
+            h = sprite.get_height()
+            surface.blit(sprite, (int(sx - w // 2), int(sy - h // 2)))
+        else:
+            pygame.draw.circle(surface, self.color, (int(sx), int(sy)), self.radius)
+            pygame.draw.circle(surface, (255, 255, 255), (int(sx), int(sy)), self.radius, 1)
         # draw health bar under enemy
         bar_w = max(32, self.radius * 2)
         bar_h = 5
