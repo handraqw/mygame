@@ -5,6 +5,9 @@ from .fsm import StateMachine
 from .camera import Camera
 from entities.player import Player
 from config import WORLD_WIDTH, WORLD_HEIGHT, GRID_SIZE
+from utils.object_pool import ObjectPool
+from entities.enemy import Enemy
+from systems.spawn_system import SpawnSystem
 
 
 class PlayingState:
@@ -41,6 +44,9 @@ class Game:
 
         # entities
         self.player = Player((WORLD_WIDTH // 2, WORLD_HEIGHT // 2))
+        # enemies
+        self.enemy_pool = ObjectPool(Enemy, initial=5)
+        self.spawn_system = SpawnSystem(self, self.enemy_pool)
 
         # start state
         self.fsm.change(PlayingState(self))
@@ -74,6 +80,21 @@ class Game:
         self.player.position[1] = py
         # update camera
         self.camera.follow(self.player.position)
+        # update spawn system
+        self.spawn_system.update(dt)
+        # update enemies
+        for e in list(self.enemy_pool.for_each()):
+            e.update(dt, self.player.position)
+            # simple collision: if touching player, apply damage and deactivate
+            dx = e.position[0] - self.player.position[0]
+            dy = e.position[1] - self.player.position[1]
+            dist2 = dx * dx + dy * dy
+            minr = (e.radius + self.player.radius)
+            if dist2 <= minr * minr and e.alive:
+                # apply damage and kill enemy
+                self.player.hp -= e.damage
+                e.alive = False
+                self.enemy_pool.release(e)
 
     def render(self):
         # draw background grid
@@ -82,6 +103,9 @@ class Game:
 
         # draw entities
         self.player.draw(self.screen, self.camera)
+        # draw enemies
+        for e in self.enemy_pool.for_each():
+            e.draw(self.screen, self.camera)
 
         # HUD: (removed FPS counter)
 
