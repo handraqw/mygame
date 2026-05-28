@@ -1,8 +1,8 @@
 import pygame
 import sys
-# event bus not used yet; removed to avoid unused import
 from .fsm import StateMachine
 from .camera import Camera
+from .eventbus import EventBus
 from entities.player import Player
 from config import WORLD_WIDTH, WORLD_HEIGHT, GRID_SIZE, ARROW_SPEED, ARROW_LIFETIME
 from utils.object_pool import ObjectPool
@@ -83,10 +83,14 @@ class Game:
         pygame.display.set_caption("Survivor Arena: Infinite Field (core)")
         self.clock = pygame.time.Clock()
         self.running = True
+        self.fixed_dt = 1.0 / 60.0
+        self.accumulator = 0.0
         # font for HUD
         self.font = pygame.font.SysFont(None, 24)
 
         self.fsm = StateMachine()
+        self.events = EventBus()
+        self.events.subscribe('enemy_died', self.spawn_xp_orb)
 
         self.camera = Camera(width, height, WORLD_WIDTH, WORLD_HEIGHT)
 
@@ -143,11 +147,22 @@ class Game:
         # start state
         self.fsm.change(PlayingState(self))
 
+    def spawn_xp_orb(self, position, xp_reward):
+        try:
+            orb = self.xp_orb_pool.acquire()
+            orb.reset(position, xp_reward)
+        except Exception:
+            pass
+
     def run(self):
         while self.running:
-            dt = self.clock.tick(60) / 1000.0
+            frame_time = self.clock.tick(60) / 1000.0
+            frame_time = min(frame_time, 0.25)
             self.handle_events()
-            self.update(dt)
+            self.accumulator += frame_time
+            while self.accumulator >= self.fixed_dt:
+                self.update(self.fixed_dt)
+                self.accumulator -= self.fixed_dt
             self.render()
 
         pygame.quit()
@@ -238,12 +253,7 @@ class Game:
                     except Exception:
                         pass
                     if e.hp <= 0:
-                        # spawn xp orb
-                        try:
-                            orb = self.xp_orb_pool.acquire()
-                            orb.reset(e.position, e.xp_reward)
-                        except Exception:
-                            pass
+                        self.events.emit('enemy_died', e.position[:], e.xp_reward)
                         e.alive = False
                         self.enemy_pool.release(e)
                     break
