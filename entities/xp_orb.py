@@ -1,4 +1,3 @@
-import math
 import pygame
 
 
@@ -17,7 +16,6 @@ class XPOrb:
         self.alive = True
 
     def update(self, dt, player_pos):
-        # static orb: no movement. Presence handled by Game (pickup on proximity).
         if not self.alive:
             return
 

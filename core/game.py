@@ -8,6 +8,7 @@ from config import WORLD_WIDTH, WORLD_HEIGHT, GRID_SIZE, ARROW_SPEED, ARROW_LIFE
 from utils.object_pool import ObjectPool
 from entities.enemy import Enemy
 from systems.spawn_system import SpawnSystem
+from systems.wave_manager import WaveManager
 from entities.xp_orb import XPOrb
 import random
 import os
@@ -34,7 +35,6 @@ class LevelUpState:
         self.options = []
 
     def enter(self, data=None):
-        # pick 3 unique upgrades with weights
         pool = [
             ('damage', 30),
             ('speed', 20),
@@ -49,7 +49,6 @@ class LevelUpState:
             choice = random.choices(keys, weights=weights, k=1)[0]
             if choice not in opts:
                 opts.append(choice)
-        # human-friendly labels
         labels = {
             'damage': '+Damage',
             'speed': '+Speed',
@@ -63,13 +62,11 @@ class LevelUpState:
         self.options = []
 
     def update(self, dt):
-        # handle input: 1,2,3 to pick
         keys = pygame.key.get_pressed()
         for i in range(3):
             if keys[getattr(pygame, f'K_{i+1}')]:
                 choice = self.options[i][0]
                 self.game.player.level_up_apply(choice)
-                # go back to playing
                 self.game.fsm.change(PlayingState(self.game))
                 return
 
@@ -85,7 +82,6 @@ class Game:
         self.running = True
         self.fixed_dt = 1.0 / 60.0
         self.accumulator = 0.0
-        # font for HUD
         self.font = pygame.font.SysFont(None, 24)
 
         self.fsm = StateMachine()
@@ -94,20 +90,15 @@ class Game:
 
         self.camera = Camera(width, height, WORLD_WIDTH, WORLD_HEIGHT)
 
-        # world
         self.world_size = (WORLD_WIDTH, WORLD_HEIGHT)
 
-        # entities
         self.player = Player((WORLD_WIDTH // 2, WORLD_HEIGHT // 2))
-        # enemies
         self.enemy_pool = ObjectPool(Enemy, initial=5)
-        self.spawn_system = SpawnSystem(self, self.enemy_pool)
-        # kills counter removed (not used in HUD)
-        # xp orbs
+        self.wave_manager = WaveManager(self)
+        self.spawn_system = SpawnSystem(self, self.enemy_pool, self.wave_manager)
+        self.events.subscribe('enemy_died', self.wave_manager.on_enemy_died)
         self.xp_orb_pool = ObjectPool(XPOrb, initial=10)
-        # arrows
         self.arrow_pool = ObjectPool(Arrow, initial=10)
-        # background image
         try:
             bg_path = os.path.join('assets', 'background', 'background.png')
             self.bg_img = pygame.image.load(bg_path).convert()
@@ -117,8 +108,6 @@ class Game:
             self.bg_img = None
             self.bg_w = 0
             self.bg_h = 0
-        # try load enemy/player/xp sprites if present
-        # helper to load and scale a sprite to target size
         def load_and_scale(path, target_size=None, alpha=True):
             try:
                 img = pygame.image.load(path)
@@ -141,10 +130,8 @@ class Game:
 
         Enemy.sprite = load_and_scale(first_png_in(os.path.join('assets', 'enemies')) or '', ENEMY_SPRITE_SIZE)
         XPOrb.sprite = load_and_scale(first_png_in(os.path.join('assets', 'experience')) or '', XP_SPRITE_SIZE)
-        # allow any filename inside assets/player/
         Player.sprite = load_and_scale(first_png_in(os.path.join('assets', 'player')) or '', PLAYER_SPRITE_SIZE)
 
-        # start state
         self.fsm.change(PlayingState(self))
 
     def spawn_xp_orb(self, position, xp_reward):
@@ -178,23 +165,18 @@ class Game:
 
     def update_playing(self, dt):
         self.player.update(dt)
-        # clamp player to world bounds (keep inside world considering player radius)
         px, py = self.player.position
         r = getattr(self.player, 'radius', 0)
         px = max(r, min(px, WORLD_WIDTH - r))
         py = max(r, min(py, WORLD_HEIGHT - r))
         self.player.position[0] = px
         self.player.position[1] = py
-        # update camera
         self.camera.follow(self.player.position)
-        # update spawn system
         self.spawn_system.update(dt)
-        # update enemies positions
         enemies = list(self.enemy_pool.for_each())
         for e in enemies:
             e.update(dt, self.player.position)
 
-        # player auto-attack: find nearest enemy within range
         target = None
         best_d2 = None
         for e in enemies:
@@ -207,7 +189,6 @@ class Game:
                 best_d2 = d2
                 target = e
 
-        # shoot arrow towards target when ready
         if target is not None and best_d2 is not None:
             if best_d2 <= (self.player.attack_range * self.player.attack_range):
                 if getattr(self.player, 'attack_timer', 0) <= 0:
@@ -225,7 +206,6 @@ class Game:
                         arr = None
                     self.player.attack_timer = self.player.attack_cooldown
 
-        # update arrows
         for arr in list(self.arrow_pool.for_each()):
             arr.update(dt)
             if not arr.alive:
@@ -234,7 +214,6 @@ class Game:
                 except Exception:
                     pass
 
-        # arrow collisions with enemies
         for arr in list(self.arrow_pool.for_each()):
             if not arr.alive:
                 continue
@@ -245,7 +224,6 @@ class Game:
                 dy = e.position[1] - arr.position[1]
                 d2 = dx * dx + dy * dy
                 if d2 <= (e.radius + arr.radius) ** 2:
-                    # hit
                     e.hp -= arr.damage
                     arr.alive = False
                     try:
@@ -257,10 +235,8 @@ class Game:
                         e.alive = False
                         self.enemy_pool.release(e)
                     break
-        # update xp orbs
         for orb in list(self.xp_orb_pool.for_each()):
             orb.update(dt, self.player.position)
-            # pickup check
             dx = orb.position[0] - self.player.position[0]
             dy = orb.position[1] - self.player.position[1]
             dist2 = dx * dx + dy * dy
@@ -269,13 +245,10 @@ class Game:
                 self.player.add_xp(orb.xp)
                 orb.alive = False
                 self.xp_orb_pool.release(orb)
-                # check level up
                 if self.player.should_level_up():
                     self.fsm.change(LevelUpState(self))
                     return
 
-        
-        # collisions (contact damage) with hit cooldown on player
         for e in enemies:
             if not e.alive:
                 continue
@@ -289,27 +262,19 @@ class Game:
                     self.player.hit_timer = self.player.hit_cooldown
 
     def render(self):
-        # draw background (tiled) or fallback color
         if getattr(self, 'bg_img', None):
             self.draw_background()
         else:
             self.screen.fill((20, 20, 20))
 
-        # draw entities
         self.player.draw(self.screen, self.camera)
-        # draw enemies
         for e in self.enemy_pool.for_each():
             e.draw(self.screen, self.camera)
-        # draw arrows
         for arr in self.arrow_pool.for_each():
             arr.draw(self.screen, self.camera)
-        # draw xp orbs
         for orb in self.xp_orb_pool.for_each():
             orb.draw(self.screen, self.camera)
 
-        # HUD: (removed FPS counter)
-        # HUD: XP bar at top
-        # draw XP bar at top center
         xp = getattr(self.player, 'xp', 0)
         lvl = getattr(self.player, 'level', 1)
         xp_next = self.player.xp_to_next(lvl)
@@ -321,19 +286,19 @@ class Game:
         fill = max(0, min(1.0, xp / xp_next))
         pygame.draw.rect(self.screen, (100, 200, 100), (bx, by, int(bar_w * fill), bar_h))
         lvl_s = self.font.render(f"Lv {lvl}", True, (255, 255, 255))
-        # draw level to the right of the bar
         self.screen.blit(lvl_s, (bx + bar_w + 8, by))
+        wave_s = self.font.render(f"Wave {self.wave_manager.wave_index}", True, (255, 255, 255))
+        wave_info = self.font.render(f"{self.wave_manager.alive_enemies}/{self.wave_manager.total_enemies}", True, (255, 255, 255))
+        self.screen.blit(wave_s, (bx, by + 20))
+        self.screen.blit(wave_info, (bx + 92, by + 20))
 
-        # if level up state active, draw overlay options
         if isinstance(self.fsm.state, LevelUpState):
             state = self.fsm.state
-            # translucent overlay
             overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 160))
             self.screen.blit(overlay, (0, 0))
             title = self.font.render("Level Up! Choose an upgrade (1-3)", True, (255, 255, 255))
             self.screen.blit(title, (self.width // 2 - title.get_width() // 2, 120))
-            # draw three boxes
             box_w = 220
             box_h = 80
             start_x = self.width // 2 - (box_w * 3 + 40) // 2
@@ -349,16 +314,13 @@ class Game:
         pygame.display.flip()
 
     def draw_grid(self):
-        # legacy: not used when background image present
         pass
 
     def draw_background(self):
-        # tile background image according to camera integer offsets
         if not self.bg_img:
             return
         tile_w = self.bg_w
         tile_h = self.bg_h
-        # pixel offset of camera inside a tile
         off_x = self.camera.ix % tile_w
         off_y = self.camera.iy % tile_h
         start_x = -off_x

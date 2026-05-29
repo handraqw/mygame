@@ -14,6 +14,5 @@ class EventBus:
         for cb in list(self._listeners.get(event_name, [])):
             try:
                 cb(*args, **kwargs)
-            except Exception as e:
-                # swallow listener exceptions to avoid breaking game loop; could log if needed
+            except Exception:
                 pass

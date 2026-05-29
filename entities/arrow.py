@@ -36,17 +36,11 @@ class Arrow:
         if not self.alive:
             return
         sx, sy = camera.world_to_screen(self.position)
-        # draw simple rotated rectangle for arrow
-        import math
-        # arrow visual size
         length = 18
         width = 6
-        # compute angle in degrees from direction
         angle = math.degrees(math.atan2(self.direction[1], self.direction[0]))
-        # create a small surface and draw a rect, then rotate
         surf = pygame.Surface((length, width), pygame.SRCALPHA)
         pygame.draw.rect(surf, self.color, (0, 0, length, width))
-        # white outline
         pygame.draw.rect(surf, (255, 255, 255), (0, 0, length, width), 1)
         rot = pygame.transform.rotate(surf, -angle)
         r = rot.get_rect(center=(int(sx), int(sy)))

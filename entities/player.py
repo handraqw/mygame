@@ -9,17 +9,13 @@ class Player:
         self.radius = radius if radius is not None else PLAYER_RADIUS
         self.color = (200, 200, 50)
         self.hp = hp if hp is not None else PLAYER_HP
-        # remember max HP for health bar
         self.max_hp = self.hp
-        # combat
         self.damage = PLAYER_DAMAGE
         self.attack_cooldown = PLAYER_ATTACK_COOLDOWN
         self.attack_timer = 0.0
         self.attack_range = PLAYER_ATTACK_RANGE
-        # contact hit cooldown (invulnerability after hit)
         self.hit_cooldown = PLAYER_HIT_COOLDOWN
         self.hit_timer = 0.0
-        # progression
         self.xp = 0
         self.level = 1
         self.xp_to_next = lambda lvl: 100 * lvl
@@ -36,7 +32,6 @@ class Player:
         if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
             vx += 1
         if vx != 0 or vy != 0:
-            # normalize
             import math
 
             l = math.hypot(vx, vy)
@@ -49,7 +44,6 @@ class Player:
     def update(self, dt):
         keys = pygame.key.get_pressed()
         self.handle_input(keys, dt)
-        # timers
         if getattr(self, 'attack_timer', 0) > 0:
             self.attack_timer -= dt
         if getattr(self, 'hit_timer', 0) > 0:
@@ -62,19 +56,16 @@ class Player:
         return self.xp >= self.xp_to_next(self.level)
 
     def level_up_apply(self, choice):
-        # choice: one of 'damage','speed','attack_rate','hp','range'
         if choice == 'damage':
             self.damage += 5
         elif choice == 'speed':
             self.speed += 40
         elif choice == 'attack_rate':
-            # reduce cooldown by 10% (min clamp)
             self.attack_cooldown = max(0.05, self.attack_cooldown * 0.9)
         elif choice == 'hp':
             self.hp += 25
         elif choice == 'range':
             self.attack_range += 30
-        # consume xp for level
         self.xp -= self.xp_to_next(self.level)
         self.level += 1
 
@@ -87,19 +78,14 @@ class Player:
             surface.blit(sprite, (int(sx - w // 2), int(sy - h // 2)))
         else:
             pygame.draw.circle(surface, self.color, (int(sx), int(sy)), self.radius)
-            # draw bounding circle
             pygame.draw.circle(surface, (255, 255, 255), (int(sx), int(sy)), self.radius, 1)
-        # draw health bar under player
         bar_w = max(40, self.radius * 2)
         bar_h = 6
         bx = int(sx - bar_w // 2)
         by = int(sy + self.radius + 6)
-        # background
         pygame.draw.rect(surface, (40, 40, 40), (bx, by, bar_w, bar_h))
-        # fill
         hp_frac = 0.0
         if getattr(self, 'max_hp', 0) > 0:
             hp_frac = max(0.0, min(1.0, self.hp / float(self.max_hp)))
         pygame.draw.rect(surface, (120, 220, 120), (bx, by, int(bar_w * hp_frac), bar_h))
-        # border
         pygame.draw.rect(surface, (255, 255, 255), (bx, by, bar_w, bar_h), 1)

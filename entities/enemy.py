@@ -3,7 +3,7 @@ import pygame
 
 
 class Enemy:
-    def __init__(self, pos=(0, 0)):
+    def __init__(self, pos=(0, 0), kind='normal'):
         self.position = list(pos)
         self.velocity = [0.0, 0.0]
         self.max_speed = 150.0
@@ -15,18 +15,62 @@ class Enemy:
         self.xp_reward = 10
         self.damage = 10
         self.alive = True
-        # max HP for health bar
         self.max_hp = self.hp
+        self.kind = 'normal'
+        self.apply_kind(kind)
 
-    def reset(self, pos):
+    def apply_kind(self, kind):
+        kinds = {
+            'normal': {
+                'radius': 14,
+                'max_speed': 150.0,
+                'max_force': 420.0,
+                'arrive_radius': 72.0,
+                'hp': 10,
+                'xp_reward': 10,
+                'damage': 10,
+                'color': (200, 50, 50)
+            },
+            'fast': {
+                'radius': 12,
+                'max_speed': 230.0,
+                'max_force': 520.0,
+                'arrive_radius': 88.0,
+                'hp': 7,
+                'xp_reward': 14,
+                'damage': 8,
+                'color': (220, 150, 50)
+            },
+            'tank': {
+                'radius': 18,
+                'max_speed': 105.0,
+                'max_force': 330.0,
+                'arrive_radius': 64.0,
+                'hp': 24,
+                'xp_reward': 22,
+                'damage': 18,
+                'color': (150, 70, 200)
+            }
+        }
+        data = kinds.get(kind, kinds['normal'])
+        self.kind = kind if kind in kinds else 'normal'
+        self.radius = data['radius']
+        self.max_speed = data['max_speed']
+        self.max_force = data['max_force']
+        self.arrive_radius = data['arrive_radius']
+        self.hp = data['hp']
+        self.max_hp = data['hp']
+        self.xp_reward = data['xp_reward']
+        self.damage = data['damage']
+        self.color = data['color']
+
+    def reset(self, pos, kind='normal'):
         self.position[0] = pos[0]
         self.position[1] = pos[1]
         self.velocity[0] = 0.0
         self.velocity[1] = 0.0
-        self.hp = 10
-        self.xp_reward = 10
+        self.apply_kind(kind)
         self.alive = True
-        self.max_hp = self.hp
 
     @staticmethod
     def clamp_magnitude(vec, max_value):
@@ -82,7 +126,6 @@ class Enemy:
         if not self.alive:
             return
         sx, sy = camera.world_to_screen(self.position)
-        # if a sprite is provided on the class, draw it centered
         sprite = getattr(self.__class__, 'sprite', None)
         if sprite:
             w = sprite.get_width()
@@ -91,7 +134,6 @@ class Enemy:
         else:
             pygame.draw.circle(surface, self.color, (int(sx), int(sy)), self.radius)
             pygame.draw.circle(surface, (255, 255, 255), (int(sx), int(sy)), self.radius, 1)
-        # draw health bar under enemy
         bar_w = max(32, self.radius * 2)
         bar_h = 5
         bx = int(sx - bar_w // 2)

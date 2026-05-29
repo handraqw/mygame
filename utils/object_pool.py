@@ -24,7 +24,6 @@ class ObjectPool:
             self._in_use.remove(obj)
         except ValueError:
             pass
-        # avoid appending duplicates to free list
         if obj not in self._free:
             self._free.append(obj)
 
