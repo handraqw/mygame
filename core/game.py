@@ -3,12 +3,15 @@ import sys
 from .fsm import StateMachine
 from .camera import Camera
 from .eventbus import EventBus
+from .spatial_grid import SpatialGrid
 from entities.player import Player
-from config import WORLD_WIDTH, WORLD_HEIGHT, GRID_SIZE, ARROW_SPEED, ARROW_LIFETIME
+from config import WORLD_WIDTH, WORLD_HEIGHT, ARROW_SPEED, ARROW_LIFETIME
 from utils.object_pool import ObjectPool
 from entities.enemy import Enemy
 from systems.spawn_system import SpawnSystem
 from systems.wave_manager import WaveManager
+from systems.particle_system import ParticleSystem
+from systems.light_system import LightSystem
 from entities.xp_orb import XPOrb
 import random
 import os
@@ -137,9 +140,13 @@ class Game:
         self.player = Player((WORLD_WIDTH // 2, WORLD_HEIGHT // 2))
         self.camera.follow(self.player.position)
         self.enemy_pool = ObjectPool(Enemy, initial=5)
+        self.enemy_grid = SpatialGrid(96)
+        self.particles = ParticleSystem(300)
+        self.light_system = LightSystem(width, height)
         self.wave_manager = WaveManager(self)
         self.spawn_system = SpawnSystem(self, self.enemy_pool, self.wave_manager)
         self.events.subscribe('enemy_died', self.wave_manager.on_enemy_died)
+        self.events.subscribe('enemy_died', self.spawn_death_particles)
         self.xp_orb_pool = ObjectPool(XPOrb, initial=10)
         self.arrow_pool = ObjectPool(Arrow, initial=10)
         try:
@@ -187,6 +194,7 @@ class Game:
         for orb in list(self.xp_orb_pool.for_each()):
             orb.alive = False
             self.xp_orb_pool.release(orb)
+        self.particles.clear()
         self.player = Player((WORLD_WIDTH // 2, WORLD_HEIGHT // 2))
         self.wave_manager.reset()
         self.camera.follow(self.player.position)
@@ -198,6 +206,9 @@ class Game:
             orb.reset(position, xp_reward)
         except Exception:
             pass
+
+    def spawn_death_particles(self, position, xp_reward):
+        self.particles.spawn(position, 14, (255, 120, 70), 150.0)
 
     def run(self):
         while self.running:
@@ -239,12 +250,15 @@ class Game:
         self.camera.follow(self.player.position)
         self.spawn_system.update(dt)
         enemies = list(self.enemy_pool.for_each())
+        self.enemy_grid.build(enemies)
         for e in enemies:
-            e.update(dt, self.player.position)
+            neighbors = self.enemy_grid.query_near(e.position)
+            e.update(dt, self.player.position, neighbors)
+        self.enemy_grid.build(enemies)
 
         target = None
         best_d2 = None
-        for e in enemies:
+        for e in self.enemy_grid.query_near(self.player.position):
             if not e.alive:
                 continue
             dx = e.position[0] - self.player.position[0]
@@ -282,7 +296,7 @@ class Game:
         for arr in list(self.arrow_pool.for_each()):
             if not arr.alive:
                 continue
-            for e in enemies:
+            for e in self.enemy_grid.query_near(arr.position):
                 if not e.alive:
                     continue
                 dx = e.position[0] - arr.position[0]
@@ -300,6 +314,7 @@ class Game:
                         e.alive = False
                         self.enemy_pool.release(e)
                     break
+        self.particles.update(dt)
         for orb in list(self.xp_orb_pool.for_each()):
             orb.update(dt, self.player.position)
             dx = orb.position[0] - self.player.position[0]
@@ -347,6 +362,8 @@ class Game:
             arr.draw(self.screen, self.camera)
         for orb in self.xp_orb_pool.for_each():
             orb.draw(self.screen, self.camera)
+        self.particles.draw(self.screen, self.camera)
+        self.light_system.apply(self.screen, self.player.position, self.camera, self.xp_orb_pool.for_each())
 
         xp = getattr(self.player, 'xp', 0)
         lvl = getattr(self.player, 'level', 1)

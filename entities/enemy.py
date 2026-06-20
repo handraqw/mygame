@@ -112,10 +112,39 @@ class Enemy:
         steer_y = desired_y - self.velocity[1]
         return self.clamp_magnitude((steer_x, steer_y), self.max_force)
 
-    def update(self, dt, target_pos):
+    def separation(self, neighbors):
+        force_x = 0.0
+        force_y = 0.0
+        count = 0
+        min_dist = self.radius * 3
+        min_dist2 = min_dist * min_dist
+        for other in neighbors:
+            if other is self or not other.alive:
+                continue
+            dx = self.position[0] - other.position[0]
+            dy = self.position[1] - other.position[1]
+            dist2 = dx * dx + dy * dy
+            if dist2 == 0 or dist2 > min_dist2:
+                continue
+            dist = math.sqrt(dist2)
+            force_x += dx / dist
+            force_y += dy / dist
+            count += 1
+        if count == 0:
+            return [0.0, 0.0]
+        force_x = force_x / count * self.max_force
+        force_y = force_y / count * self.max_force
+        return self.clamp_magnitude((force_x, force_y), self.max_force)
+
+    def update(self, dt, target_pos, neighbors=None):
         if not self.alive:
             return
         steering = self.arrive(target_pos)
+        if neighbors is not None:
+            sep = self.separation(neighbors)
+            steering[0] += sep[0] * 0.7
+            steering[1] += sep[1] * 0.7
+            steering = self.clamp_magnitude(steering, self.max_force)
         self.velocity[0] += steering[0] * dt
         self.velocity[1] += steering[1] * dt
         self.velocity = self.clamp_magnitude(self.velocity, self.max_speed)

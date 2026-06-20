@@ -12,3 +12,4 @@ __pycache__/
 .pytest_cache/
 /project_code_dump.txt
 /theory
+CODE_EXPLANATION.md
