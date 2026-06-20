@@ -15,12 +15,54 @@ import os
 from entities.arrow import Arrow
 
 
+class MenuState:
+    def __init__(self, game):
+        self.game = game
+        self.button_rect = pygame.Rect(0, 0, 0, 0)
+
+    def enter(self, data=None):
+        bw = 220
+        bh = 50
+        bx = self.game.width // 2 - bw // 2
+        by = self.game.height // 2 + 20
+        self.button_rect = pygame.Rect(bx, by, bw, bh)
+
+    def exit(self):
+        pass
+
+    def update(self, dt):
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_RETURN] or keys[pygame.K_SPACE]:
+            self.game.fsm.change(PlayingState(self.game))
+
+
+class GameOverState:
+    def __init__(self, game):
+        self.game = game
+        self.button_rect = pygame.Rect(0, 0, 0, 0)
+
+    def enter(self, data=None):
+        bw = 220
+        bh = 50
+        bx = self.game.width // 2 - bw // 2
+        by = self.game.height // 2 + 40
+        self.button_rect = pygame.Rect(bx, by, bw, bh)
+
+    def exit(self):
+        pass
+
+    def update(self, dt):
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_RETURN] or keys[pygame.K_SPACE]:
+            self.game.restart_game()
+
+
 class PlayingState:
     def __init__(self, game):
         self.game = game
 
     def enter(self, data=None):
-        pass
+        self.game.camera.follow(self.game.player.position)
 
     def exit(self):
         pass
@@ -50,11 +92,11 @@ class LevelUpState:
             if choice not in opts:
                 opts.append(choice)
         labels = {
-            'damage': '+Damage',
-            'speed': '+Speed',
-            'attack_rate': 'Faster Attack',
-            'hp': '+Max HP',
-            'range': '+Range',
+            'damage': '+Урон',
+            'speed': '+Скорость',
+            'attack_rate': 'Быстрее атака',
+            'hp': '+Здоровье',
+            'range': '+Дальность',
         }
         self.options = [(k, labels.get(k, k)) for k in opts]
 
@@ -77,7 +119,7 @@ class Game:
         self.width = width
         self.height = height
         self.screen = pygame.display.set_mode((width, height))
-        pygame.display.set_caption("Survivor Arena: Infinite Field (core)")
+        pygame.display.set_caption("Арена выживания")
         self.clock = pygame.time.Clock()
         self.running = True
         self.fixed_dt = 1.0 / 60.0
@@ -93,6 +135,7 @@ class Game:
         self.world_size = (WORLD_WIDTH, WORLD_HEIGHT)
 
         self.player = Player((WORLD_WIDTH // 2, WORLD_HEIGHT // 2))
+        self.camera.follow(self.player.position)
         self.enemy_pool = ObjectPool(Enemy, initial=5)
         self.wave_manager = WaveManager(self)
         self.spawn_system = SpawnSystem(self, self.enemy_pool, self.wave_manager)
@@ -132,6 +175,21 @@ class Game:
         XPOrb.sprite = load_and_scale(first_png_in(os.path.join('assets', 'experience')) or '', XP_SPRITE_SIZE)
         Player.sprite = load_and_scale(first_png_in(os.path.join('assets', 'player')) or '', PLAYER_SPRITE_SIZE)
 
+        self.fsm.change(MenuState(self))
+
+    def restart_game(self):
+        for e in list(self.enemy_pool.for_each()):
+            e.alive = False
+            self.enemy_pool.release(e)
+        for arr in list(self.arrow_pool.for_each()):
+            arr.alive = False
+            self.arrow_pool.release(arr)
+        for orb in list(self.xp_orb_pool.for_each()):
+            orb.alive = False
+            self.xp_orb_pool.release(orb)
+        self.player = Player((WORLD_WIDTH // 2, WORLD_HEIGHT // 2))
+        self.wave_manager.reset()
+        self.camera.follow(self.player.position)
         self.fsm.change(PlayingState(self))
 
     def spawn_xp_orb(self, position, xp_reward):
@@ -159,6 +217,13 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if isinstance(self.fsm.state, MenuState):
+                    if self.fsm.state.button_rect.collidepoint(event.pos):
+                        self.fsm.change(PlayingState(self))
+                elif isinstance(self.fsm.state, GameOverState):
+                    if self.fsm.state.button_rect.collidepoint(event.pos):
+                        self.restart_game()
 
     def update(self, dt):
         self.fsm.update(dt)
@@ -261,7 +326,15 @@ class Game:
                     self.player.hp -= e.damage
                     self.player.hit_timer = self.player.hit_cooldown
 
+        if self.player.hp <= 0:
+            self.fsm.change(GameOverState(self))
+
     def render(self):
+        if isinstance(self.fsm.state, MenuState):
+            self.render_menu()
+            pygame.display.flip()
+            return
+
         if getattr(self, 'bg_img', None):
             self.draw_background()
         else:
@@ -285,9 +358,9 @@ class Game:
         pygame.draw.rect(self.screen, (60, 60, 60), (bx, by, bar_w, bar_h))
         fill = max(0, min(1.0, xp / xp_next))
         pygame.draw.rect(self.screen, (100, 200, 100), (bx, by, int(bar_w * fill), bar_h))
-        lvl_s = self.font.render(f"Lv {lvl}", True, (255, 255, 255))
+        lvl_s = self.font.render(f"Ур. {lvl}", True, (255, 255, 255))
         self.screen.blit(lvl_s, (bx + bar_w + 8, by))
-        wave_s = self.font.render(f"Wave {self.wave_manager.wave_index}", True, (255, 255, 255))
+        wave_s = self.font.render(f"Волна {self.wave_manager.wave_index}", True, (255, 255, 255))
         wave_info = self.font.render(f"{self.wave_manager.alive_enemies}/{self.wave_manager.total_enemies}", True, (255, 255, 255))
         self.screen.blit(wave_s, (bx, by + 20))
         self.screen.blit(wave_info, (bx + 92, by + 20))
@@ -297,7 +370,7 @@ class Game:
             overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 160))
             self.screen.blit(overlay, (0, 0))
-            title = self.font.render("Level Up! Choose an upgrade (1-3)", True, (255, 255, 255))
+            title = self.font.render("Новый уровень! Выберите улучшение (1-3)", True, (255, 255, 255))
             self.screen.blit(title, (self.width // 2 - title.get_width() // 2, 120))
             box_w = 220
             box_h = 80
@@ -311,7 +384,36 @@ class Game:
                 lbl = self.font.render(f"{i+1}. {opt[1]}", True, (255, 255, 255))
                 self.screen.blit(lbl, (x + 12, y + 24))
 
+        if isinstance(self.fsm.state, GameOverState):
+            state = self.fsm.state
+            overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 180))
+            self.screen.blit(overlay, (0, 0))
+            title = self.font.render("Вы погибли", True, (255, 80, 80))
+            self.screen.blit(title, (self.width // 2 - title.get_width() // 2, self.height // 2 - 80))
+            self.draw_button(state.button_rect, "Начать заново")
+            hint = self.font.render("Enter или клик", True, (200, 200, 200))
+            self.screen.blit(hint, (self.width // 2 - hint.get_width() // 2, state.button_rect.bottom + 16))
+
         pygame.display.flip()
+
+    def render_menu(self):
+        self.screen.fill((20, 20, 30))
+        title_font = pygame.font.SysFont(None, 48)
+        title = title_font.render("Арена выживания", True, (255, 255, 255))
+        self.screen.blit(title, (self.width // 2 - title.get_width() // 2, self.height // 2 - 120))
+        state = self.fsm.state
+        self.draw_button(state.button_rect, "Начать игру")
+        hint = self.font.render("WASD — движение", True, (180, 180, 180))
+        self.screen.blit(hint, (self.width // 2 - hint.get_width() // 2, state.button_rect.bottom + 20))
+        hint2 = self.font.render("Enter или клик — начать", True, (140, 140, 140))
+        self.screen.blit(hint2, (self.width // 2 - hint2.get_width() // 2, state.button_rect.bottom + 44))
+
+    def draw_button(self, rect, text):
+        pygame.draw.rect(self.screen, (80, 80, 120), rect)
+        pygame.draw.rect(self.screen, (255, 255, 255), rect, 2)
+        lbl = self.font.render(text, True, (255, 255, 255))
+        self.screen.blit(lbl, (rect.centerx - lbl.get_width() // 2, rect.centery - lbl.get_height() // 2))
 
     def draw_grid(self):
         pass

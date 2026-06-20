@@ -11,10 +11,16 @@ class Camera:
 
     def follow(self, target_pos):
         tx, ty = target_pos
-        self.x = tx - self.width // 2
-        self.y = ty - self.height // 2
-        self.x = max(0, min(self.x, self.world_width - self.width))
-        self.y = max(0, min(self.y, self.world_height - self.height))
+        if self.world_width <= self.width:
+            self.x = (self.world_width - self.width) / 2.0
+        else:
+            self.x = tx - self.width / 2.0
+            self.x = max(0, min(self.x, self.world_width - self.width))
+        if self.world_height <= self.height:
+            self.y = (self.world_height - self.height) / 2.0
+        else:
+            self.y = ty - self.height / 2.0
+            self.y = max(0, min(self.y, self.world_height - self.height))
         self.ix = int(self.x)
         self.iy = int(self.y)
 

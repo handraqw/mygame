@@ -1,8 +1,9 @@
 from core.game import Game
+from config import SCREEN_WIDTH, SCREEN_HEIGHT
 
 
 def main():
-    game = Game(800, 600)
+    game = Game(SCREEN_WIDTH, SCREEN_HEIGHT)
     game.run()
 
 

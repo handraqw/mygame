@@ -23,32 +23,32 @@ class Enemy:
         kinds = {
             'normal': {
                 'radius': 14,
-                'max_speed': 150.0,
-                'max_force': 420.0,
+                'max_speed': 175.0,
+                'max_force': 480.0,
                 'arrive_radius': 72.0,
-                'hp': 10,
+                'hp': 14,
                 'xp_reward': 10,
-                'damage': 10,
+                'damage': 12,
                 'color': (200, 50, 50)
             },
             'fast': {
                 'radius': 12,
-                'max_speed': 230.0,
-                'max_force': 520.0,
+                'max_speed': 265.0,
+                'max_force': 580.0,
                 'arrive_radius': 88.0,
-                'hp': 7,
+                'hp': 9,
                 'xp_reward': 14,
-                'damage': 8,
+                'damage': 10,
                 'color': (220, 150, 50)
             },
             'tank': {
                 'radius': 18,
-                'max_speed': 105.0,
-                'max_force': 330.0,
+                'max_speed': 120.0,
+                'max_force': 380.0,
                 'arrive_radius': 64.0,
-                'hp': 24,
+                'hp': 32,
                 'xp_reward': 22,
-                'damage': 18,
+                'damage': 22,
                 'color': (150, 70, 200)
             }
         }

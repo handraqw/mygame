@@ -26,6 +26,8 @@ class WaveManager:
 
     def current_spawn_interval(self):
         interval = WAVE_BASE_SPAWN_INTERVAL - (self.wave_index - 1) * WAVE_SPAWN_INTERVAL_DECAY
+        if self.wave_index <= 3:
+            interval = interval * 0.7
         return max(WAVE_MIN_SPAWN_INTERVAL, interval)
 
     def on_enemy_spawned(self):
@@ -52,10 +54,20 @@ class WaveManager:
         self.spawn_timer = 0.0
 
     def weights_for_wave(self):
-        normal = max(35, 100 - self.wave_index * 8)
-        fast = 0 if self.wave_index < WAVE_FAST_UNLOCK else 20 + self.wave_index * 4
-        tank = 0 if self.wave_index < WAVE_TANK_UNLOCK else 8 + self.wave_index * 3
+        normal = max(20, 90 - self.wave_index * 10)
+        fast = 0 if self.wave_index < WAVE_FAST_UNLOCK else 25 + self.wave_index * 5
+        tank = 0 if self.wave_index < WAVE_TANK_UNLOCK else 12 + self.wave_index * 4
         return [normal, fast, tank]
+
+    def reset(self):
+        self.state = WaveState.PREPARING
+        self.wave_index = 0
+        self.timer = WAVE_PREPARE_TIME
+        self.spawn_timer = 0.0
+        self.spawned = 0
+        self.alive_enemies = 0
+        self.total_enemies = 0
+        self.spawn_interval = WAVE_BASE_SPAWN_INTERVAL
 
     def choose_enemy_kind(self):
         kinds = ['normal', 'fast', 'tank']
