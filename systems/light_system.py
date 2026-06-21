@@ -1,5 +1,7 @@
 import pygame
 
+import config
+
 
 class LightSystem:
     def __init__(self, width, height):
@@ -23,12 +25,6 @@ class LightSystem:
         self.light_map.fill((105, 105, 120))
 
         player_screen = camera.world_to_screen(player_pos)
-        self.draw_light(player_screen, 230, (170, 170, 150))
-
-        for orb in orbs:
-            if not orb.alive:
-                continue
-            orb_screen = camera.world_to_screen(orb.position)
-            self.draw_light(orb_screen, 80, (70, 120, 160))
+        self.draw_light(player_screen, config.PLAYER_LIGHT_RADIUS, (170, 170, 150))
 
         surface.blit(self.light_map, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
