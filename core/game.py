@@ -258,7 +258,7 @@ class Game:
 
         target = None
         best_d2 = None
-        for e in self.enemy_grid.query_near(self.player.position):
+        for e in self.enemy_grid.query_near(self.player.position, self.player.attack_range):
             if not e.alive:
                 continue
             dx = e.position[0] - self.player.position[0]

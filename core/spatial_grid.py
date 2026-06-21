@@ -22,10 +22,14 @@ class SpatialGrid:
             if getattr(obj, 'alive', True):
                 self.add(obj)
 
-    def query_near(self, position):
+    def query_near(self, position, radius=None):
         cx, cy = self.cell_key(position)
+        if radius is None:
+            cell_range = 1
+        else:
+            cell_range = int(radius // self.cell_size) + 1
         result = []
-        for y in range(cy - 1, cy + 2):
-            for x in range(cx - 1, cx + 2):
+        for y in range(cy - cell_range, cy + cell_range + 1):
+            for x in range(cx - cell_range, cx + cell_range + 1):
                 result.extend(self.cells.get((x, y), []))
         return result
