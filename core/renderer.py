@@ -34,7 +34,6 @@ class Renderer:
             self.screen, 
             self.game.player.position, 
             self.game.camera, 
-            self.game.xp_orb_pool.for_each(), 
             self.game.player.attack_range
         )
 
@@ -130,8 +129,6 @@ class Renderer:
         lbl = self.font.render(text, True, (255, 255, 255))
         self.screen.blit(lbl, (rect.centerx - lbl.get_width() // 2, rect.centery - lbl.get_height() // 2))
 
-    def draw_grid(self):
-        pass
 
     def draw_background(self):
         bg_img = getattr(self.game, 'bg_img', None)

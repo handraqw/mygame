@@ -9,6 +9,7 @@ from .spatial_grid import SpatialGrid
 from .states import MenuState, GameOverState, PlayingState, LevelUpState
 from .renderer import Renderer
 from .resource_loader import load_and_scale, first_png_in
+from .utils import circles_overlap
 
 from entities.player import Player
 from entities.enemy import Enemy
@@ -151,7 +152,15 @@ class Game:
     def update(self, dt):
         self.fsm.update(dt)
 
+
     def update_playing(self, dt):
+        self.update_player(dt)
+        self.update_enemies(dt)
+        self.update_combat(dt)
+        self.update_pickups(dt)
+        self.check_game_over()
+
+    def update_player(self, dt):
         self.player.update(dt)
         px, py = self.player.position
         r = getattr(self.player, 'radius', 0)
@@ -161,7 +170,8 @@ class Game:
         self.player.position[1] = py
         self.camera.follow(self.player.position)
         self.spawn_system.update(dt)
-        
+
+    def update_enemies(self, dt):
         enemies = list(self.enemy_pool.for_each())
         self.enemy_grid.build(enemies)
         for e in enemies:
@@ -169,6 +179,7 @@ class Game:
             e.update(dt, self.player.position, neighbors)
         self.enemy_grid.build(enemies)
 
+    def update_combat(self, dt):
         target = None
         best_d2 = None
         for e in self.enemy_grid.query_near(self.player.position, self.player.attack_range):
@@ -180,7 +191,6 @@ class Game:
             if best_d2 is None or d2 < best_d2:
                 best_d2 = d2
                 target = e
-
         if target is not None and best_d2 is not None:
             if best_d2 <= (self.player.attack_range * self.player.attack_range):
                 if getattr(self.player, 'attack_timer', 0) <= 0:
@@ -194,16 +204,15 @@ class Game:
                     try:
                         arr = self.arrow_pool.acquire()
                         arr.reset(
-                            self.player.position[:], 
-                            (ndx, ndy), 
-                            ARROW_SPEED, 
-                            self.player.damage, 
+                            self.player.position[:],
+                            (ndx, ndy),
+                            ARROW_SPEED,
+                            self.player.damage,
                             ARROW_LIFETIME
                         )
                     except Exception:
                         arr = None
                     self.player.attack_timer = self.player.attack_cooldown
-
         for arr in list(self.arrow_pool.for_each()):
             arr.update(dt)
             if not arr.alive:
@@ -211,17 +220,13 @@ class Game:
                     self.arrow_pool.release(arr)
                 except Exception:
                     pass
-
         for arr in list(self.arrow_pool.for_each()):
             if not arr.alive:
                 continue
             for e in self.enemy_grid.query_near(arr.position):
                 if not e.alive:
                     continue
-                dx = e.position[0] - arr.position[0]
-                dy = e.position[1] - arr.position[1]
-                d2 = dx * dx + dy * dy
-                if d2 <= (e.radius + arr.radius) ** 2:
+                if circles_overlap(arr.position, arr.radius, e.position, e.radius):
                     e.hp -= arr.damage
                     arr.alive = False
                     try:
@@ -233,16 +238,12 @@ class Game:
                         e.alive = False
                         self.enemy_pool.release(e)
                     break
-        
+
+    def update_pickups(self, dt):
         self.particles.update(dt)
-        
         for orb in list(self.xp_orb_pool.for_each()):
             orb.update(dt, self.player.position)
-            dx = orb.position[0] - self.player.position[0]
-            dy = orb.position[1] - self.player.position[1]
-            dist2 = dx * dx + dy * dy
-            pickup_r = (orb.radius + self.player.radius)
-            if dist2 <= pickup_r * pickup_r and orb.alive:
+            if circles_overlap(orb.position, orb.radius, self.player.position, self.player.radius) and orb.alive:
                 self.player.add_xp(orb.xp)
                 orb.alive = False
                 self.xp_orb_pool.release(orb)
@@ -250,17 +251,14 @@ class Game:
                     self.fsm.change(LevelUpState(self))
                     return
 
+    def check_game_over(self):
+        enemies = list(self.enemy_pool.for_each())
         for e in enemies:
             if not e.alive:
                 continue
-            dx = e.position[0] - self.player.position[0]
-            dy = e.position[1] - self.player.position[1]
-            dist2 = dx * dx + dy * dy
-            minr = (e.radius + self.player.radius)
-            if dist2 <= minr * minr:
+            if circles_overlap(e.position, e.radius, self.player.position, self.player.radius):
                 if getattr(self.player, 'hit_timer', 0) <= 0:
                     self.player.hp -= e.damage
                     self.player.hit_timer = self.player.hit_cooldown
-
         if self.player.hp <= 0:
             self.fsm.change(GameOverState(self))
