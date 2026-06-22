@@ -363,7 +363,7 @@ class Game:
         for orb in self.xp_orb_pool.for_each():
             orb.draw(self.screen, self.camera)
         self.particles.draw(self.screen, self.camera)
-        self.light_system.apply(self.screen, self.player.position, self.camera, self.xp_orb_pool.for_each())
+        self.light_system.apply(self.screen, self.player.position, self.camera, self.xp_orb_pool.for_each(), self.player.attack_range)
 
         xp = getattr(self.player, 'xp', 0)
         lvl = getattr(self.player, 'level', 1)

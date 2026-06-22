@@ -21,10 +21,16 @@ class LightSystem:
             )
             pygame.draw.circle(self.light_map, draw_color, (int(x), int(y)), r)
 
-    def apply(self, surface, player_pos, camera, orbs):
+    def apply(self, surface, player_pos, camera, orbs, player_attack_range=None):
         self.light_map.fill((105, 105, 120))
 
+        if player_attack_range is not None:
+            light_radius = config.PLAYER_LIGHT_RADIUS + (player_attack_range - config.PLAYER_ATTACK_RANGE)
+            light_radius = max(config.PLAYER_LIGHT_RADIUS, light_radius)
+        else:
+            light_radius = config.PLAYER_LIGHT_RADIUS
+
         player_screen = camera.world_to_screen(player_pos)
-        self.draw_light(player_screen, config.PLAYER_LIGHT_RADIUS, (170, 170, 150))
+        self.draw_light(player_screen, light_radius, (170, 170, 150))
 
         surface.blit(self.light_map, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
