@@ -21,7 +21,7 @@ class LightSystem:
             )
             pygame.draw.circle(self.light_map, draw_color, (int(x), int(y)), r)
 
-    def apply(self, surface, player_pos, camera, orbs, player_attack_range=None):
+    def apply(self, surface, player_pos, camera, player_attack_range=None):
         self.light_map.fill((105, 105, 120))
 
         if player_attack_range is not None:

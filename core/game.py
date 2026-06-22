@@ -1,119 +1,30 @@
 import pygame
 import sys
+import os
+
 from .fsm import StateMachine
 from .camera import Camera
 from .eventbus import EventBus
 from .spatial_grid import SpatialGrid
+from .states import MenuState, GameOverState, PlayingState, LevelUpState
+from .renderer import Renderer
+from .resource_loader import load_and_scale, first_png_in
+
 from entities.player import Player
-from config import WORLD_WIDTH, WORLD_HEIGHT, ARROW_SPEED, ARROW_LIFETIME
-from utils.object_pool import ObjectPool
 from entities.enemy import Enemy
+from entities.xp_orb import XPOrb
+from entities.arrow import Arrow
+
+from config import (
+    WORLD_WIDTH, WORLD_HEIGHT, ARROW_SPEED, ARROW_LIFETIME,
+    PLAYER_SPRITE_SIZE, ENEMY_SPRITE_SIZE, XP_SPRITE_SIZE
+)
+
+from utils.object_pool import ObjectPool
 from systems.spawn_system import SpawnSystem
 from systems.wave_manager import WaveManager
 from systems.particle_system import ParticleSystem
 from systems.light_system import LightSystem
-from entities.xp_orb import XPOrb
-import random
-import os
-from entities.arrow import Arrow
-
-
-class MenuState:
-    def __init__(self, game):
-        self.game = game
-        self.button_rect = pygame.Rect(0, 0, 0, 0)
-
-    def enter(self, data=None):
-        bw = 220
-        bh = 50
-        bx = self.game.width // 2 - bw // 2
-        by = self.game.height // 2 + 20
-        self.button_rect = pygame.Rect(bx, by, bw, bh)
-
-    def exit(self):
-        pass
-
-    def update(self, dt):
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_RETURN] or keys[pygame.K_SPACE]:
-            self.game.fsm.change(PlayingState(self.game))
-
-
-class GameOverState:
-    def __init__(self, game):
-        self.game = game
-        self.button_rect = pygame.Rect(0, 0, 0, 0)
-
-    def enter(self, data=None):
-        bw = 220
-        bh = 50
-        bx = self.game.width // 2 - bw // 2
-        by = self.game.height // 2 + 40
-        self.button_rect = pygame.Rect(bx, by, bw, bh)
-
-    def exit(self):
-        pass
-
-    def update(self, dt):
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_RETURN] or keys[pygame.K_SPACE]:
-            self.game.restart_game()
-
-
-class PlayingState:
-    def __init__(self, game):
-        self.game = game
-
-    def enter(self, data=None):
-        self.game.camera.follow(self.game.player.position)
-
-    def exit(self):
-        pass
-
-    def update(self, dt):
-        self.game.update_playing(dt)
-
-
-class LevelUpState:
-    def __init__(self, game):
-        self.game = game
-        self.options = []
-
-    def enter(self, data=None):
-        pool = [
-            ('damage', 30),
-            ('speed', 20),
-            ('attack_rate', 20),
-            ('hp', 20),
-            ('range', 10),
-        ]
-        keys = [p[0] for p in pool]
-        weights = [p[1] for p in pool]
-        opts = []
-        while len(opts) < 3:
-            choice = random.choices(keys, weights=weights, k=1)[0]
-            if choice not in opts:
-                opts.append(choice)
-        labels = {
-            'damage': '+Урон',
-            'speed': '+Скорость',
-            'attack_rate': 'Быстрее атака',
-            'hp': '+Здоровье',
-            'range': '+Дальность',
-        }
-        self.options = [(k, labels.get(k, k)) for k in opts]
-
-    def exit(self):
-        self.options = []
-
-    def update(self, dt):
-        keys = pygame.key.get_pressed()
-        for i in range(3):
-            if keys[getattr(pygame, f'K_{i+1}')]:
-                choice = self.options[i][0]
-                self.game.player.level_up_apply(choice)
-                self.game.fsm.change(PlayingState(self.game))
-                return
 
 
 class Game:
@@ -134,21 +45,31 @@ class Game:
         self.events.subscribe('enemy_died', self.spawn_xp_orb)
 
         self.camera = Camera(width, height, WORLD_WIDTH, WORLD_HEIGHT)
-
         self.world_size = (WORLD_WIDTH, WORLD_HEIGHT)
 
         self.player = Player((WORLD_WIDTH // 2, WORLD_HEIGHT // 2))
         self.camera.follow(self.player.position)
+        
         self.enemy_pool = ObjectPool(Enemy, initial=5)
         self.enemy_grid = SpatialGrid(96)
         self.particles = ParticleSystem(300)
         self.light_system = LightSystem(width, height)
+        
         self.wave_manager = WaveManager(self)
         self.spawn_system = SpawnSystem(self, self.enemy_pool, self.wave_manager)
         self.events.subscribe('enemy_died', self.wave_manager.on_enemy_died)
         self.events.subscribe('enemy_died', self.spawn_death_particles)
+        
         self.xp_orb_pool = ObjectPool(XPOrb, initial=10)
         self.arrow_pool = ObjectPool(Arrow, initial=10)
+        
+        self._load_resources()
+
+        self.renderer = Renderer(self)
+
+        self.fsm.change(MenuState(self))
+
+    def _load_resources(self):
         try:
             bg_path = os.path.join('assets', 'background', 'background.png')
             self.bg_img = pygame.image.load(bg_path).convert()
@@ -158,31 +79,19 @@ class Game:
             self.bg_img = None
             self.bg_w = 0
             self.bg_h = 0
-        def load_and_scale(path, target_size=None, alpha=True):
-            try:
-                img = pygame.image.load(path)
-                img = img.convert_alpha() if alpha else img.convert()
-                if target_size:
-                    img = pygame.transform.smoothscale(img, target_size)
-                return img
-            except Exception:
-                return None
 
-        from config import PLAYER_SPRITE_SIZE, ENEMY_SPRITE_SIZE, XP_SPRITE_SIZE
-
-        def first_png_in(dirpath):
-            try:
-                for fn in os.listdir(dirpath):
-                    if fn.lower().endswith('.png'):
-                        return os.path.join(dirpath, fn)
-            except Exception:
-                return None
-
-        Enemy.sprite = load_and_scale(first_png_in(os.path.join('assets', 'enemies')) or '', ENEMY_SPRITE_SIZE)
-        XPOrb.sprite = load_and_scale(first_png_in(os.path.join('assets', 'experience')) or '', XP_SPRITE_SIZE)
-        Player.sprite = load_and_scale(first_png_in(os.path.join('assets', 'player')) or '', PLAYER_SPRITE_SIZE)
-
-        self.fsm.change(MenuState(self))
+        Enemy.sprite = load_and_scale(
+            first_png_in(os.path.join('assets', 'enemies')) or '', 
+            ENEMY_SPRITE_SIZE
+        )
+        XPOrb.sprite = load_and_scale(
+            first_png_in(os.path.join('assets', 'experience')) or '', 
+            XP_SPRITE_SIZE
+        )
+        Player.sprite = load_and_scale(
+            first_png_in(os.path.join('assets', 'player')) or '', 
+            PLAYER_SPRITE_SIZE
+        )
 
     def restart_game(self):
         for e in list(self.enemy_pool.for_each()):
@@ -194,6 +103,7 @@ class Game:
         for orb in list(self.xp_orb_pool.for_each()):
             orb.alive = False
             self.xp_orb_pool.release(orb)
+        
         self.particles.clear()
         self.player = Player((WORLD_WIDTH // 2, WORLD_HEIGHT // 2))
         self.wave_manager.reset()
@@ -216,10 +126,12 @@ class Game:
             frame_time = min(frame_time, 0.25)
             self.handle_events()
             self.accumulator += frame_time
+            
             while self.accumulator >= self.fixed_dt:
                 self.update(self.fixed_dt)
                 self.accumulator -= self.fixed_dt
-            self.render()
+            
+            self.renderer.render()
 
         pygame.quit()
         sys.exit()
@@ -249,6 +161,7 @@ class Game:
         self.player.position[1] = py
         self.camera.follow(self.player.position)
         self.spawn_system.update(dt)
+        
         enemies = list(self.enemy_pool.for_each())
         self.enemy_grid.build(enemies)
         for e in enemies:
@@ -280,7 +193,13 @@ class Game:
                         ndx, ndy = dx / dist, dy / dist
                     try:
                         arr = self.arrow_pool.acquire()
-                        arr.reset(self.player.position[:], (ndx, ndy), ARROW_SPEED, self.player.damage, ARROW_LIFETIME)
+                        arr.reset(
+                            self.player.position[:], 
+                            (ndx, ndy), 
+                            ARROW_SPEED, 
+                            self.player.damage, 
+                            ARROW_LIFETIME
+                        )
                     except Exception:
                         arr = None
                     self.player.attack_timer = self.player.attack_cooldown
@@ -314,7 +233,9 @@ class Game:
                         e.alive = False
                         self.enemy_pool.release(e)
                     break
+        
         self.particles.update(dt)
+        
         for orb in list(self.xp_orb_pool.for_each()):
             orb.update(dt, self.player.position)
             dx = orb.position[0] - self.player.position[0]
@@ -343,111 +264,3 @@ class Game:
 
         if self.player.hp <= 0:
             self.fsm.change(GameOverState(self))
-
-    def render(self):
-        if isinstance(self.fsm.state, MenuState):
-            self.render_menu()
-            pygame.display.flip()
-            return
-
-        if getattr(self, 'bg_img', None):
-            self.draw_background()
-        else:
-            self.screen.fill((20, 20, 20))
-
-        self.player.draw(self.screen, self.camera)
-        for e in self.enemy_pool.for_each():
-            e.draw(self.screen, self.camera)
-        for arr in self.arrow_pool.for_each():
-            arr.draw(self.screen, self.camera)
-        for orb in self.xp_orb_pool.for_each():
-            orb.draw(self.screen, self.camera)
-        self.particles.draw(self.screen, self.camera)
-        self.light_system.apply(self.screen, self.player.position, self.camera, self.xp_orb_pool.for_each(), self.player.attack_range)
-
-        xp = getattr(self.player, 'xp', 0)
-        lvl = getattr(self.player, 'level', 1)
-        xp_next = self.player.xp_to_next(lvl)
-        bar_w = 300
-        bar_h = 12
-        bx = self.width // 2 - bar_w // 2
-        by = 8
-        pygame.draw.rect(self.screen, (60, 60, 60), (bx, by, bar_w, bar_h))
-        fill = max(0, min(1.0, xp / xp_next))
-        pygame.draw.rect(self.screen, (100, 200, 100), (bx, by, int(bar_w * fill), bar_h))
-        lvl_s = self.font.render(f"Ур. {lvl}", True, (255, 255, 255))
-        self.screen.blit(lvl_s, (bx + bar_w + 8, by))
-        wave_s = self.font.render(f"Волна {self.wave_manager.wave_index}", True, (255, 255, 255))
-        wave_info = self.font.render(f"{self.wave_manager.alive_enemies}/{self.wave_manager.total_enemies}", True, (255, 255, 255))
-        self.screen.blit(wave_s, (bx, by + 20))
-        self.screen.blit(wave_info, (bx + 92, by + 20))
-
-        if isinstance(self.fsm.state, LevelUpState):
-            state = self.fsm.state
-            overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 160))
-            self.screen.blit(overlay, (0, 0))
-            title = self.font.render("Новый уровень! Выберите улучшение (1-3)", True, (255, 255, 255))
-            self.screen.blit(title, (self.width // 2 - title.get_width() // 2, 120))
-            box_w = 220
-            box_h = 80
-            start_x = self.width // 2 - (box_w * 3 + 40) // 2
-            y = 200
-            for i, opt in enumerate(state.options):
-                x = start_x + i * (box_w + 20)
-                rect = pygame.Rect(x, y, box_w, box_h)
-                pygame.draw.rect(self.screen, (80, 80, 120), rect)
-                pygame.draw.rect(self.screen, (255, 255, 255), rect, 2)
-                lbl = self.font.render(f"{i+1}. {opt[1]}", True, (255, 255, 255))
-                self.screen.blit(lbl, (x + 12, y + 24))
-
-        if isinstance(self.fsm.state, GameOverState):
-            state = self.fsm.state
-            overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 180))
-            self.screen.blit(overlay, (0, 0))
-            title = self.font.render("Вы погибли", True, (255, 80, 80))
-            self.screen.blit(title, (self.width // 2 - title.get_width() // 2, self.height // 2 - 80))
-            self.draw_button(state.button_rect, "Начать заново")
-            hint = self.font.render("Enter или клик", True, (200, 200, 200))
-            self.screen.blit(hint, (self.width // 2 - hint.get_width() // 2, state.button_rect.bottom + 16))
-
-        pygame.display.flip()
-
-    def render_menu(self):
-        self.screen.fill((20, 20, 30))
-        title_font = pygame.font.SysFont(None, 48)
-        title = title_font.render("Арена выживания", True, (255, 255, 255))
-        self.screen.blit(title, (self.width // 2 - title.get_width() // 2, self.height // 2 - 120))
-        state = self.fsm.state
-        self.draw_button(state.button_rect, "Начать игру")
-        hint = self.font.render("WASD — движение", True, (180, 180, 180))
-        self.screen.blit(hint, (self.width // 2 - hint.get_width() // 2, state.button_rect.bottom + 20))
-        hint2 = self.font.render("Enter или клик — начать", True, (140, 140, 140))
-        self.screen.blit(hint2, (self.width // 2 - hint2.get_width() // 2, state.button_rect.bottom + 44))
-
-    def draw_button(self, rect, text):
-        pygame.draw.rect(self.screen, (80, 80, 120), rect)
-        pygame.draw.rect(self.screen, (255, 255, 255), rect, 2)
-        lbl = self.font.render(text, True, (255, 255, 255))
-        self.screen.blit(lbl, (rect.centerx - lbl.get_width() // 2, rect.centery - lbl.get_height() // 2))
-
-    def draw_grid(self):
-        pass
-
-    def draw_background(self):
-        if not self.bg_img:
-            return
-        tile_w = self.bg_w
-        tile_h = self.bg_h
-        off_x = self.camera.ix % tile_w
-        off_y = self.camera.iy % tile_h
-        start_x = -off_x
-        start_y = -off_y
-        x = start_x
-        while x < self.width:
-            y = start_y
-            while y < self.height:
-                self.screen.blit(self.bg_img, (x, y))
-                y += tile_h
-            x += tile_w
