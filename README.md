@@ -30,3 +30,10 @@ python main.py
 | Object Pool | `utils/object_pool.py` | Легко | |
 | Weighted random + binary search | `systems/wave_manager.py` | Легко | |
 | Arrive steering | `entities/enemy.py` | Легко | |
+
+| Принцип ООП | Где реализован | Ключевая строка | Что сказать |
+|-------------|----------------|-----------------|-------------|
+| **Инкапсуляция** | `utils/object_pool.py` | `self._free = []` | Приватные поля защищены публичными методами |
+| **Абстракция** | `core/fsm.py` | `class State:` с `pass` | Базовый класс задаёт интерфейс FSM |
+| **Наследование** | `core/states.py` | Все состояния имеют `enter()`, `exit()`, `update()` | Реализация интерфейса `State` |
+| **Полиморфизм** | `entities/*.py` + `core/renderer.py` | `obj.draw(screen, camera)` | Один вызов, разные реализации |
